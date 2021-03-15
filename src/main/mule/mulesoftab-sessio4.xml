@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="b45dcbf1-1aad-428d-aab1-827af8c95bbc" >
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="a6d66802-7dfc-4ea6-9cd3-2331abe78a47" file="newconfig.yaml" />
+	<flow name="mulesoftab-sessio4Flow" doc:id="70aa2d3c-0046-47af-b87e-be95d6cdc628" >
+		<http:listener doc:name="Listener" doc:id="acfd1a97-bbb0-4a6b-929b-6aef90e1c9cf" config-ref="HTTP_Listener_config" path="/test"/>
+		<set-variable value="#[attributes.queryParams.name]" doc:name="Set Variable" doc:id="5e7548f5-7d4e-41a1-be04-b72ab1e17509" variableName="name"/>
+		<logger level="INFO" doc:name="Logger" doc:id="00d07f24-e5ff-4bf1-a1c8-17a42d2a1f93" message='"after setting variable"'/>
+		<ee:transform doc:name="Transform Message" doc:id="4d8ef248-9e15-4586-98b4-53f7916f0201" >
+			<ee:message >
+				<ee:set-payload ><![CDATA['${http.port}']]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="f08524c4-1ad9-4ba5-b639-c47517b21b5c" message='"end step"'/>
+	</flow>
+	<flow name="mulesoftab-sessio4Flow-private-flow" doc:id="3d9ce9d9-8fa1-4ed7-99e8-43c6e34d3f4a" >
+		<set-payload value='#["Hi..you are in private flow"]' doc:name="Set Payload" doc:id="14cd9f8c-e4fa-4bcb-9f4e-2bff08bf6232" />
+	</flow>
+	<sub-flow name="mulesoftab-sessio4Sub_Flow" doc:id="6bd5a150-5929-4353-b013-31d552e49cf4" >
+		<set-payload value='#["Hi.. you are in subflow"]' doc:name="sub flow payload" doc:id="2dc4f29a-93ff-464d-bd84-0e66e3d87d4a" />
+	</sub-flow>
+</mule>
