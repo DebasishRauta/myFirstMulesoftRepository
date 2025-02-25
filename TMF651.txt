@@ -1,0 +1,61 @@
+title ACVW Cisco Webex Customer – Add ACVW to CTNs
+
+actor Cisco VAR
+participant Cisco Webex Calling Platform
+participantgroup **MuleSoft RTF/Azure**
+participant CSMULE
+participant SystemAPI
+end
+participant TLG
+participant JackcacheDB
+participant ROME
+participant CCR-R
+participant CBUS/IEBUS
+actor Customer AOP
+destroysilent Cisco VAR
+
+group Auth
+Cisco Webex Calling Platform->CSMULE: Check Authorization (**TMF651**)
+
+alt Retrieve FAN either from Jachcache or TLG
+CSMULE->SystemAPI: Retrieve account details
+SystemAPI->JackcacheDB:jackcache.inquireAccount request
+JackcacheDB-->SystemAPI: jackcache.inquireAccount response
+SystemAPI-->CSMULE:Retrieve account details response
+else 
+CSMULE->SystemAPI: Retrieve account details from TLG if Jackcache has no latest info
+SystemAPI->TLG: TLGAPI.inquireAccount request
+TLG-->SystemAPI: TLGAPI.inquireAccount response
+SystemAPI-->CSMULE: Retrieve account details from TLG response
+CSMULE->SystemAPI: Update Jachcache with latest TLG info
+SystemAPI->JackcacheDB: jackcache.addUpdateAccount request
+JackcacheDB-->SystemAPI: jackcache.addUpdateAccount response
+SystemAPI-->CSMULE: Update Jachcache response
+end
+
+CSMULE->CCR-R: Query prior consent for the FAN
+CCR-R-->CSMULE: Query prior consent response
+CSMULE-->Cisco Webex Calling Platform:Authorization Result
+else 
+Cisco Webex Calling Platform->CSMULE: Create Authorization if no prior consent
+CSMULE->ROME: Retrieve Customer AOP for the FAN
+ROME-->CSMULE: Retrieve Customer AOP response
+CSMULE->CBUS/IEBUS: Send authorization request SMS 
+CSMULE-->Cisco Webex Calling Platform: Authorization acknowledgement
+CBUS/IEBUS->Customer AOP: Authorization request SMS
+
+alt Waiting for customer consent SMS
+activate CBUS/IEBUS
+CBUS/IEBUS->CBUS/IEBUS: Start timer \nwaiting for customer consent SMS 
+Customer AOP-->CBUS/IEBUS: Send authorization response SMS
+CBUS/IEBUS-->CSMULE:Authorization response SMS
+CSMULE->CCR-R: Save customer conset if the conset is positive
+else
+CBUS/IEBUS->CBUS/IEBUS: Time is up (e.g., 2 days)\n with no customer response
+deactivate CBUS/IEBUS
+
+CBUS/IEBUS-->CSMULE: Notification for non-response after 48 hours
+end
+
+CSMULE-->Cisco Webex Calling Platform: Authorization Response
+end

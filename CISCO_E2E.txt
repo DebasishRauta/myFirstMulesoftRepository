@@ -1,0 +1,178 @@
+title ACVW Cisco Webex Customer – Add ACVW to CTNs
+
+actor Cisco VAR
+participant Cisco Webex Calling Platform
+participantgroup **MuleSoft RTF/Azure**
+participant CSMULE
+participant EventBased API
+participant SystemAPI
+end
+participant TLG
+participant JackcacheDB
+participant ROME
+participant CCR-R
+participant CBUS/IEBUS
+participant SWC
+participant ATT Mobility Network
+actor Customer AOP
+destroysilent Cisco VAR
+
+group  Inventory
+Cisco Webex Calling Platform->CSMULE: Retrieve subscriber List by BAN (**TMF639**)
+CSMULE->SystemAPI: Retrieve subscriber list by BAN
+SystemAPI->TLG: TLGAPI.getsublistbyban
+TLG-->SystemAPI:     TLGAPI.getsublistbyban response\n       with pagation as needed
+SystemAPI-->CSMULE:Retrieve subscriber list response
+CSMULE-->Cisco Webex Calling Platform: Retrieve subscriber list response
+end
+
+group  Qual
+Cisco Webex Calling Platform ->CSMULE: Check Qualification (**TMF645**)
+CSMULE-->Cisco Webex Calling Platform: Check Qualification Acknowledgement
+
+alt Retrieve FAN either from Jachcache or TLG
+CSMULE->SystemAPI: Retrieve FAN by CTN & so we can compare the FAN to the FAN sent by Client if BAN isn't sent
+SystemAPI->JackcacheDB:jackcache.inquireAccount request
+JackcacheDB-->SystemAPI: jackcache.inquireAccount response
+SystemAPI-->CSMULE:Retrieve FAN response
+else 
+CSMULE->SystemAPI: Retrieve FAN/Account details from TLG if Jackcache has no latest info
+SystemAPI->TLG: TLGAPI.inquireAccount request
+TLG-->SystemAPI: TLGAPI.inquireAccount response
+SystemAPI-->CSMULE: Retrieve FAN/Account details from TLG response
+CSMULE->SystemAPI: Update Jachcache with latest TLG info
+SystemAPI->JackcacheDB: jackcache.addUpdateAccount request
+JackcacheDB-->SystemAPI: jackcache.addUpdateAccount response
+SystemAPI-->CSMULE: Update Jachcache response
+end
+
+CSMULE->CSMULE: Validate the FAN sent by Cisco\n matches FAN retrieved by CTN
+note right of CSMULE: For CTNs not under the FAN\n should be marked as not eligibile 
+
+alt Retrieve account details either from Jachcache or TLG
+CSMULE->SystemAPI: Retrieve account details
+SystemAPI->JackcacheDB:jackcache.inquireAccount request
+JackcacheDB-->SystemAPI: jackcache.inquireAccount response
+SystemAPI-->CSMULE:Retrieve account details response
+else 
+CSMULE->SystemAPI: Retrieve account details from TLG if Jackcache has no latest info
+SystemAPI->TLG: TLGAPI.inquireAccount request
+TLG-->SystemAPI: TLGAPI.inquireAccount response
+SystemAPI-->CSMULE: Retrieve account details from TLG response
+CSMULE->SystemAPI: Update Jachcache with latest TLG info
+SystemAPI->JackcacheDB: jackcache.addUpdateAccount request
+JackcacheDB-->SystemAPI: jackcache.addUpdateAccount response
+SystemAPI-->CSMULE: Update Jachcache response
+end
+
+CSMULE->CSMULE: Validate the CTNs sent by Cisco\n are indeed under the BAN sent in the request  
+note right of CSMULE:For CTNs not under the BAN\n should be marked as not eligibile
+
+CSMULE->CBUS/IEBUS: Publish check qualification request to  ISBUS (aSync)
+CBUS/IEBUS-->EventBased API:Consume check qualification request (aSync)
+
+alt Retrieve subscriber details either from Jachcache or TLG
+EventBased API->SystemAPI: Retrieve subscriber details
+SystemAPI->JackcacheDB:jackcache.inquireSubscriber request
+JackcacheDB-->SystemAPI: jackcache.inquireSubscriber response
+SystemAPI-->EventBased API:Retrieve subscriber details response
+else 
+EventBased API->SystemAPI: Retrieve subscriber details from TLG\n if Jackcache has no latest info
+SystemAPI->TLG: TLGAPI.inquireSubscriber request
+TLG-->SystemAPI:     TLGAPI.inquireSubscriber response
+SystemAPI-->EventBased API: Retrieve subscriber details from TLG response
+EventBased API->SystemAPI: Update Jachcache with latest TLG info
+SystemAPI->JackcacheDB: jackcache.addUpdateSubscriber request
+JackcacheDB-->SystemAPI: jackcache.addUpdateSubscriber response
+SystemAPI-->EventBased API: Update Jachcache response
+end
+
+EventBased API->EventBased API: Eligibility Check through \nDrools engine based on Account/Subscriber details
+EventBased API->CBUS/IEBUS: Publish check qualification response (Async)
+CBUS/IEBUS-->CSMULE: Consume check qualification response (aSync)
+CSMULE-->Cisco Webex Calling Platform: Check Qualification Response
+end
+
+group Auth
+Cisco Webex Calling Platform->CSMULE: Check Authorization (**TMF651**)
+
+alt Retrieve FAN either from Jachcache or TLG
+CSMULE->SystemAPI: Retrieve account details
+SystemAPI->JackcacheDB:jackcache.inquireAccount request
+JackcacheDB-->SystemAPI: jackcache.inquireAccount response
+SystemAPI-->CSMULE:Retrieve account details response
+else 
+CSMULE->SystemAPI: Retrieve account details from TLG if Jackcache has no latest info
+SystemAPI->TLG: TLGAPI.inquireAccount request
+TLG-->SystemAPI: TLGAPI.inquireAccount response
+SystemAPI-->CSMULE: Retrieve account details from TLG response
+CSMULE->SystemAPI: Update Jachcache with latest TLG info
+SystemAPI->JackcacheDB: jackcache.addUpdateAccount request
+JackcacheDB-->SystemAPI: jackcache.addUpdateAccount response
+SystemAPI-->CSMULE: Update Jachcache response
+end
+
+CSMULE->CCR-R: Query prior consent for the FAN
+CCR-R-->CSMULE: Query prior consent response
+CSMULE-->Cisco Webex Calling Platform:Authorization Result
+else 
+Cisco Webex Calling Platform->CSMULE: Create Authorization if no prior consent
+CSMULE->ROME: Retrieve Customer AOP for the FAN
+ROME-->CSMULE: Retrieve Customer AOP response
+CSMULE->CBUS/IEBUS: Send authorization request SMS 
+CSMULE-->Cisco Webex Calling Platform: Authorization acknowledgement
+CBUS/IEBUS->Customer AOP: Authorization request SMS
+
+alt Waiting for customer consent SMS
+activate CBUS/IEBUS
+CBUS/IEBUS->CBUS/IEBUS: Start timer \nwaiting for customer consent SMS 
+Customer AOP-->CBUS/IEBUS: Send authorization response SMS
+CBUS/IEBUS-->CSMULE:Authorization response SMS
+CSMULE->CCR-R: Save customer conset if the conset is positive
+else
+CBUS/IEBUS->CBUS/IEBUS: Time is up (e.g., 2 days)\n with no customer response
+deactivate CBUS/IEBUS
+
+CBUS/IEBUS-->CSMULE: Notification for non-response after 48 hours
+end
+
+CSMULE-->Cisco Webex Calling Platform: Authorization Response
+end
+
+
+group Ordering/Activation
+Cisco Webex Calling Platform->CSMULE: Service Ordering (**TMF641**)
+CSMULE-->Cisco Webex Calling Platform: Acknowledgement
+CSMULE->CBUS/IEBUS: Publish service ordering request (aSync)
+CBUS/IEBUS-->EventBased API: Consume service ordering request
+alt 
+alt Verify - Authorization & Eligibility
+activate EventBased API
+EventBased API->EventBased API: Authorization\nverification (Invoke **TMF651** defined above)
+EventBased API->CBUS/IEBUS: Publish failure/error response if authorization verification failed
+deactivate EventBased API
+else
+activate EventBased API
+EventBased API->EventBased API: Eligibility\nverification (Invoke **TMF645** defined above)
+EventBased API->CBUS/IEBUS:Publish failure/error response if verification failed for all of the CTNs
+deactivate EventBased API
+end
+else
+EventBased API->SystemAPI: Add or remove Bolt On (ACVW & Fasttrack) SOC
+SystemAPI->TLG: TLGAPI.updateSubscriber request
+TLG-->SystemAPI:    TLGAPI.updateSubscriber response
+SystemAPI-->EventBased API: Add or remove Bolt On SOC response
+EventBased API->CBUS/IEBUS: Publish service ordering response
+CSMULE<--CBUS/IEBUS:Consume service ordering response
+
+CSMULE-->Cisco Webex Calling Platform:Service Order Response
+
+TLG->SWC: Network provisioning
+SWC-->CBUS/IEBUS: Publish notification\n if any issue arises during provisioning
+SWC->ATT Mobility Network: Mobility network (CTS/HSS)\n provisioning
+ATT Mobility Network-->CBUS/IEBUS: Publish notification if any issue arises during netowrk provisioning
+CBUS/IEBUS-->CSMULE: Consume notification for any issue arisen during SWC or mobility network provisioning
+CSMULE->CBUS/IEBUS:     Publish notification
+CBUS/IEBUS-->Cisco Webex Calling Platform: Consume notification
+end
+end

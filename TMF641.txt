@@ -1,0 +1,51 @@
+title ACVW Cisco Webex Customer – Add ACVW to CTNs
+
+actor Cisco VAR
+participant Cisco Webex Calling Platform
+participantgroup **MuleSoft RTF/Azure**
+participant CSMULE
+participant EventBased API
+participant SystemAPI
+end
+participant TLG
+participant CBUS/IEBUS
+participant SWC
+participant ATT Mobility Network
+destroysilent Cisco VAR
+
+group Ordering/Activation
+Cisco Webex Calling Platform->CSMULE: Service Ordering (**TMF641**)
+CSMULE->EventBased API: Request
+EventBased API-->CSMULE: Acknowledgement
+CSMULE-->Cisco Webex Calling Platform: Acknowledgement
+alt 
+alt Verify - Authorization & Eligibility
+activate EventBased API
+EventBased API->EventBased API: Authorization\nverification (Invoke **TMF651** defined above)
+EventBased API->CBUS/IEBUS: Publish failure/error response if authorization verification failed
+deactivate EventBased API
+else
+activate EventBased API
+EventBased API->EventBased API: Eligibility\nverification (Invoke **TMF645** defined above)
+EventBased API->CBUS/IEBUS:Publish failure/error response if verification failed for all of the CTNs
+deactivate EventBased API
+end
+else
+EventBased API->SystemAPI: Add or remove Bolt On (ACVW & Fasttrack) SOC
+SystemAPI->TLG: TLGAPI.updateSubscriber request
+TLG-->SystemAPI:    TLGAPI.updateSubscriber response
+SystemAPI-->EventBased API: Add or remove Bolt On SOC response
+EventBased API->CBUS/IEBUS: Publish service ordering response
+CSMULE<--CBUS/IEBUS:Consume service ordering response
+
+CSMULE-->Cisco Webex Calling Platform:Service Order Response
+
+TLG->SWC: Network provisioning
+SWC-->CBUS/IEBUS: Publish notification\n if any issue arises during provisioning
+SWC->ATT Mobility Network: Mobility network (CTS/HSS)\n provisioning
+ATT Mobility Network-->CBUS/IEBUS: Publish notification if any issue arises during netowrk provisioning
+CBUS/IEBUS-->CSMULE: Consume notification for any issue arisen during SWC or mobility network provisioning
+CSMULE->CBUS/IEBUS:     Publish notification
+CBUS/IEBUS-->Cisco Webex Calling Platform: Consume notification
+end
+end

@@ -1,0 +1,19 @@
+title ACVW Cisco Webex Customer – Add ACVW to CTNs
+
+actor Cisco VAR
+participant Cisco Webex Calling Platform
+participantgroup **MuleSoft RTF/Azure**
+participant CSMULE
+participant SystemAPI
+end
+participant TLG
+destroysilent Cisco VAR
+
+group  Inventory
+Cisco Webex Calling Platform->CSMULE: Retrieve subscriber List by BAN (**TMF639**)
+CSMULE->SystemAPI: Retrieve subscriber list by BAN
+SystemAPI->TLG: TLGAPI.getsublistbyban
+TLG-->SystemAPI:     TLGAPI.getsublistbyban response\n       with pagation as needed
+SystemAPI-->CSMULE:Retrieve subscriber list response
+CSMULE-->Cisco Webex Calling Platform: Retrieve subscriber list response
+end
